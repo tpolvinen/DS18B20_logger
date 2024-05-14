@@ -1,5 +1,6 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include "RTClib.h"
 
 // Data wire is plugged into port 6 on the Arduino
 #define ONE_WIRE_BUS 6
@@ -18,8 +19,31 @@ DallasTemperature sensors(&oneWire);
 DeviceAddress insideThermometer = { 0x28, 0x41, 0x42, 0xE3, 0x5D, 0x20, 0x01, 0x03 };
 DeviceAddress outsideThermometer   = { 0x28, 0xA7, 0x22, 0x64, 0x62, 0x20, 0x01, 0x57 };
 
+unsigned long currentMillis;
+
+RTC_DS3231 rtc;
+DateTime now;
+unsigned long startMeasurementIntervalSec = 0; // to mark the start of current measurementInterval in RTC unixtime
+const unsigned long measurementIntervalSec = 5; // seconds, measured in RTC unixtime
+unsigned long startClockCheckIntervalMs = 0;
+const unsigned long clockCheckIntervalMs = 1000;
+
 void setup() {
+  pinMode(LED_BUILTIN, OUTPUT);
   Serial.begin(9600);
+  while (!Serial) {
+    delay(10);
+  }
+
+  if (! rtc.begin()) {
+    Serial.println("Couldn't find RTC");
+    Serial.flush();
+    while (1) delay(10);
+  }
+  now = rtc.now();
+  // start measurementInterval and set it back by interval time -> starts measurements in loop() right away
+  startMeasurementIntervalSec = now.unixtime() - measurementIntervalSec;
+  startClockCheckIntervalMs = millis();
 
   // Start up the sensor library
   sensors.begin();
@@ -97,27 +121,54 @@ void printData(DeviceAddress deviceAddress) {
 }
 
 void loop() {
+  uint16_t thisYear;
+  int8_t thisMonth, thisDay, thisHour, thisMinute, thisSecond;
+  char DateAndTimeString[20]; //19 digits plus the null char
   String dataRemark;
-  // call sensors.requestTemperatures() to issue a global temperature
-  // request to all devices on the bus
-  sensors.requestTemperatures();
-  float insideTempC = sensors.getTempC(insideThermometer);
-  float outsideTempC = sensors.getTempC(outsideThermometer);
-  if (insideTempC == DEVICE_DISCONNECTED_C) {
-    dataRemark.concat(" Error: Failed to read from insideThermometer! ");
-  }
-  if (outsideTempC == DEVICE_DISCONNECTED_C) {
-    dataRemark.concat(" Error: Failed to read from outsideThermometer! ");
+
+  currentMillis = millis();
+
+  if (currentMillis - startClockCheckIntervalMs >= clockCheckIntervalMs) {
+    startClockCheckIntervalMs = currentMillis;
+    now = rtc.now();
   }
 
-  Serial.print("insideTempC: ");
-  Serial.print(insideTempC);
-  Serial.print(", ");
-  Serial.print("outsideTempC: ");
-  Serial.print(outsideTempC);
-  Serial.print(", ");
-  Serial.print("dataRemark: ");
-  Serial.print(dataRemark);
-  Serial.println();
+  if (now.unixtime() - startMeasurementIntervalSec >= measurementIntervalSec) {
+    digitalWrite(LED_BUILTIN, HIGH);
+    
+    startMeasurementIntervalSec = now.unixtime();
+    thisYear = now.year();
+    thisMonth = now.month();
+    thisDay = now.day();
+    thisHour = now.hour();
+    thisMinute = now.minute();
+    thisSecond = now.second();
+    sprintf_P(DateAndTimeString, PSTR("%4d-%02d-%02dT%d:%02d:%02d"), 
+    thisYear, thisMonth, thisDay, thisHour, thisMinute, thisSecond);
 
+    // call sensors.requestTemperatures() to issue a global temperature
+    // request to all devices on the bus
+    sensors.requestTemperatures();
+    float insideTempC = sensors.getTempC(insideThermometer);
+    float outsideTempC = sensors.getTempC(outsideThermometer);
+    if (insideTempC == DEVICE_DISCONNECTED_C) {
+      dataRemark.concat(" Error: Failed to read from insideThermometer! ");
+    }
+    if (outsideTempC == DEVICE_DISCONNECTED_C) {
+      dataRemark.concat(" Error: Failed to read from outsideThermometer! ");
+    }
+    Serial.print(DateAndTimeString);
+    Serial.print(", ");
+    Serial.print("insideTempC: ");
+    Serial.print(insideTempC);
+    Serial.print(", ");
+    Serial.print("outsideTempC: ");
+    Serial.print(outsideTempC);
+    Serial.print(", ");
+    Serial.print("dataRemark: ");
+    Serial.print(dataRemark);
+    Serial.println();
+
+    digitalWrite(LED_BUILTIN, LOW);
+  }
 }
