@@ -11,9 +11,6 @@ OneWire oneWire(ONE_WIRE_BUS);
 // Pass our oneWire reference to Dallas Temperature.
 DallasTemperature sensors(&oneWire);
 
-// arrays to hold device addresses
-//DeviceAddress insideThermometer, outsideThermometer;
-
 // Assign address manually. The addresses below will need to be changed
 // to valid device addresses on your bus. Device address can be retrieved
 // by using either oneWire.search(deviceAddress) or individually via
@@ -58,6 +55,9 @@ void setup() {
   Serial.print("Device 1 Resolution: ");
   Serial.print(sensors.getResolution(outsideThermometer), DEC);
   Serial.println();
+
+  printTemperature(insideThermometer);
+  printTemperature(outsideThermometer);
 }
 
 // function to print a device address
@@ -97,14 +97,27 @@ void printData(DeviceAddress deviceAddress) {
 }
 
 void loop() {
+  String dataRemark;
   // call sensors.requestTemperatures() to issue a global temperature
   // request to all devices on the bus
-  Serial.print("Requesting temperatures...");
   sensors.requestTemperatures();
-  Serial.println("DONE");
+  float insideTempC = sensors.getTempC(insideThermometer);
+  float outsideTempC = sensors.getTempC(outsideThermometer);
+  if (insideTempC == DEVICE_DISCONNECTED_C) {
+    dataRemark.concat(" Error: Failed to read from insideThermometer! ");
+  }
+  if (outsideTempC == DEVICE_DISCONNECTED_C) {
+    dataRemark.concat(" Error: Failed to read from outsideThermometer! ");
+  }
 
-  // print the device information
-  printData(insideThermometer);
-  printData(outsideThermometer);
+  Serial.print("insideTempC: ");
+  Serial.print(insideTempC);
+  Serial.print(", ");
+  Serial.print("outsideTempC: ");
+  Serial.print(outsideTempC);
+  Serial.print(", ");
+  Serial.print("dataRemark: ");
+  Serial.print(dataRemark);
+  Serial.println();
 
 }
