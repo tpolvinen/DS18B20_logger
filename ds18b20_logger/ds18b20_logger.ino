@@ -33,8 +33,19 @@ const unsigned long clockCheckIntervalMs = 1000;
 const int chipSelect = 10; // for SD card SPI
 File datafile;
 
+const int buttonPin = 4;
+int currentButtonState;
+int lastButtonState = HIGH;   // the previous reading from the input pin
+bool writeButtonPress = false;
+unsigned long lastDebounceTime = 0;  // the last time the output pin was toggled
+unsigned long debounceDelay = 50;    // the debounce time; increase if the output flickers
+
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
+  // initialize the pushbutton pin as an pull-up input
+  // the pull-up input pin will be HIGH when the switch is open and LOW when the switch is closed.
+  pinMode(buttonPin, INPUT_PULLUP);
+
   Serial.begin(9600);
   while (!Serial) {
     delay(10);
@@ -169,7 +180,20 @@ void loop() {
   char dateAndTimeArr[20]; //19 digits plus the null char
   char dataRemarkArr[50];
 
+  int reading = digitalRead(buttonPin);
   currentMillis = millis();
+
+  if (reading != lastButtonState) {
+    lastDebounceTime = currentMillis;
+    currentButtonState = reading;
+  }
+
+  if (currentMillis - lastDebounceTime >= debounceDelay) {
+    if (lastButtonState == LOW && currentButtonState == HIGH) {
+      writeButtonPress = true;
+    }
+    lastButtonState = currentButtonState;
+  }
 
   if (currentMillis - startClockCheckIntervalMs >= clockCheckIntervalMs) {
     startClockCheckIntervalMs = currentMillis;
@@ -192,19 +216,21 @@ void loop() {
     datafile.print(",");
 
     strcpy(dataRemarkArr, " ");
+    if (writeButtonPress) {
+      strcat(dataRemarkArr, "Kissaa rapsutettu!");
+      writeButtonPress = false;
+    }
 
     // call sensors.requestTemperatures() to issue a global temperature
     // request to all devices on the bus
     sensors.requestTemperatures();
     float insideTempC = sensors.getTempC(insideThermometer);
     float outsideTempC = sensors.getTempC(outsideThermometer);
-    if (insideTempC == DEVICE_DISCONNECTED_C) {
-      strcat(dataRemarkArr, " Error: T inside ");
-      Serial.println(" Error: T inside ");
+    if (insideTempC == DEVICE_DISCONNECTED_C || insideTempC > 125 || insideTempC < -55) {
+      strcat(dataRemarkArr, " Vika:inside");
     }
-    if (outsideTempC == DEVICE_DISCONNECTED_C) {
-      strcat(dataRemarkArr, " Error: T outside ");
-      Serial.println(" Error: T outside ");
+    if (outsideTempC == DEVICE_DISCONNECTED_C || outsideTempC > 125 || outsideTempC < -55) {
+      strcat(dataRemarkArr, " Vika:outside");
     }
 
     datafile.print(insideTempC);
