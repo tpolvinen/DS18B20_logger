@@ -1,3 +1,5 @@
+#include <SPI.h>
+#include <SD.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include "RTClib.h"
@@ -27,6 +29,9 @@ unsigned long startMeasurementIntervalSec = 0; // to mark the start of current m
 const unsigned long measurementIntervalSec = 5; // seconds, measured in RTC unixtime
 unsigned long startClockCheckIntervalMs = 0;
 const unsigned long clockCheckIntervalMs = 1000;
+
+const int chipSelect = 10; // for SD card SPI
+File datafile;
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
@@ -82,6 +87,43 @@ void setup() {
 
   printTemperature(insideThermometer);
   printTemperature(outsideThermometer);
+
+  Serial.print("Initializing SD card...");
+  // make sure that the default chip select pin is set to
+  // output, even if you don't use it:
+  pinMode(10, OUTPUT);
+  // see if the card is present and can be initialized:
+  if (!SD.begin(chipSelect)) {
+    Serial.println("Card failed, or not present");
+  }
+  Serial.println("Done.");
+  Serial.print("Creating a new file...");
+  char filename[] = "00000000.CSV";
+  filename[0] = (now.year() / 10) % 10 + '0';
+  filename[1] = now.year() % 10 + '0';
+  filename[2] = now.month() / 10 + '0';
+  filename[3] = now.month() % 10 + '0';
+  filename[4] = now.day() / 10 + '0';
+  filename[5] = now.day() % 10 + '0';
+  for (uint8_t i = 0; i < 100; i++) {
+    filename[6] = i / 10 + '0';
+    filename[7] = i % 10 + '0';
+    if (! SD.exists(filename)) {
+      // only open a new file if it doesn't exist
+      datafile = SD.open(filename, FILE_WRITE);
+      break;  // leave the loop!
+    }
+  }
+  if (! datafile) {
+    Serial.println("File create failed!");
+  }
+  Serial.println("Done.");
+  Serial.print("Logging to: ");
+  Serial.println(filename);
+
+  datafile.println("datetime,T inside,T outside,remark");
+  Serial.print("File header: ");
+  Serial.println("datetime,T inside,T outside,remark");
 }
 
 // function to print a device address
@@ -121,10 +163,11 @@ void printData(DeviceAddress deviceAddress) {
 }
 
 void loop() {
+
   uint16_t thisYear;
   int8_t thisMonth, thisDay, thisHour, thisMinute, thisSecond;
-  char DateAndTimeString[20]; //19 digits plus the null char
-  String dataRemark;
+  char dateAndTimeArr[20]; //19 digits plus the null char
+  char dataRemarkArr[50];
 
   currentMillis = millis();
 
@@ -135,7 +178,7 @@ void loop() {
 
   if (now.unixtime() - startMeasurementIntervalSec >= measurementIntervalSec) {
     digitalWrite(LED_BUILTIN, HIGH);
-    
+
     startMeasurementIntervalSec = now.unixtime();
     thisYear = now.year();
     thisMonth = now.month();
@@ -143,8 +186,12 @@ void loop() {
     thisHour = now.hour();
     thisMinute = now.minute();
     thisSecond = now.second();
-    sprintf_P(DateAndTimeString, PSTR("%4d-%02d-%02dT%d:%02d:%02d"), 
-    thisYear, thisMonth, thisDay, thisHour, thisMinute, thisSecond);
+    sprintf_P(dateAndTimeArr, PSTR("%4d-%02d-%02dT%d:%02d:%02d"),
+              thisYear, thisMonth, thisDay, thisHour, thisMinute, thisSecond);
+    datafile.print(dateAndTimeArr);
+    datafile.print(",");
+
+    strcpy(dataRemarkArr, " ");
 
     // call sensors.requestTemperatures() to issue a global temperature
     // request to all devices on the bus
@@ -152,12 +199,21 @@ void loop() {
     float insideTempC = sensors.getTempC(insideThermometer);
     float outsideTempC = sensors.getTempC(outsideThermometer);
     if (insideTempC == DEVICE_DISCONNECTED_C) {
-      dataRemark.concat(" Error: Failed to read from insideThermometer! ");
+      strcat(dataRemarkArr, " Error: T inside ");
+      Serial.println(" Error: T inside ");
     }
     if (outsideTempC == DEVICE_DISCONNECTED_C) {
-      dataRemark.concat(" Error: Failed to read from outsideThermometer! ");
+      strcat(dataRemarkArr, " Error: T outside ");
+      Serial.println(" Error: T outside ");
     }
-    Serial.print(DateAndTimeString);
+
+    datafile.print(insideTempC);
+    datafile.print(",");
+    datafile.print(outsideTempC);
+    datafile.print(",");
+    datafile.println(dataRemarkArr);
+
+    Serial.print(dateAndTimeArr);
     Serial.print(", ");
     Serial.print("insideTempC: ");
     Serial.print(insideTempC);
@@ -165,10 +221,11 @@ void loop() {
     Serial.print("outsideTempC: ");
     Serial.print(outsideTempC);
     Serial.print(", ");
-    Serial.print("dataRemark: ");
-    Serial.print(dataRemark);
+    Serial.print("dataRemarkArr: ");
+    Serial.print(dataRemarkArr);
     Serial.println();
 
+    datafile.flush();
     digitalWrite(LED_BUILTIN, LOW);
   }
 }
