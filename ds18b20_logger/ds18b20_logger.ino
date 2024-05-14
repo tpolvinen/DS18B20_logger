@@ -41,7 +41,7 @@ unsigned long lastDebounceTime = 0;  // the last time the output pin was toggled
 unsigned long debounceDelay = 50;    // the debounce time; increase if the output flickers
 
 void setup() {
-  pinMode(LED_BUILTIN, OUTPUT);
+
   // initialize the pushbutton pin as an pull-up input
   // the pull-up input pin will be HIGH when the switch is open and LOW when the switch is closed.
   pinMode(buttonPin, INPUT_PULLUP);
@@ -95,10 +95,7 @@ void setup() {
   Serial.print("Device 1 Resolution: ");
   Serial.print(sensors.getResolution(outsideThermometer), DEC);
   Serial.println();
-
-  printTemperature(insideThermometer);
-  printTemperature(outsideThermometer);
-
+  
   Serial.print("Initializing SD card...");
   // make sure that the default chip select pin is set to
   // output, even if you don't use it:
@@ -146,33 +143,6 @@ void printAddress(DeviceAddress deviceAddress) {
   }
 }
 
-// function to print the temperature for a device
-void printTemperature(DeviceAddress deviceAddress) {
-  float tempC = sensors.getTempC(deviceAddress);
-  if (tempC == DEVICE_DISCONNECTED_C) {
-    Serial.println("Error: Could not read temperature data");
-    return;
-  }
-  Serial.print("Temp C: ");
-  Serial.print(tempC);
-}
-
-// function to print a device's resolution
-void printResolution(DeviceAddress deviceAddress) {
-  Serial.print("Resolution: ");
-  Serial.print(sensors.getResolution(deviceAddress));
-  Serial.println();
-}
-
-// main function to print information about a device
-void printData(DeviceAddress deviceAddress) {
-  Serial.print("Device Address: ");
-  printAddress(deviceAddress);
-  Serial.print(" ");
-  printTemperature(deviceAddress);
-  Serial.println();
-}
-
 void loop() {
 
   uint16_t thisYear;
@@ -201,7 +171,6 @@ void loop() {
   }
 
   if (now.unixtime() - startMeasurementIntervalSec >= measurementIntervalSec) {
-    digitalWrite(LED_BUILTIN, HIGH);
 
     startMeasurementIntervalSec = now.unixtime();
     thisYear = now.year();
@@ -252,6 +221,5 @@ void loop() {
     Serial.println();
 
     datafile.flush();
-    digitalWrite(LED_BUILTIN, LOW);
   }
 }
