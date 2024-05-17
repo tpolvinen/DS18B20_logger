@@ -1,10 +1,3 @@
-//ilman SD-toimintoja:
-//Sketch uses 13184 bytes (40%) of program storage space. Maximum is 32256 bytes.
-//Global variables use 770 bytes (37%) of dynamic memory, leaving 1278 bytes for local variables. Maximum is 2048 bytes.
-//SdFat-kirjaston ja SD-toimintojen kanssa:
-//Sketch uses 23584 bytes (73%) of program storage space. Maximum is 32256 bytes.
-//Global variables use 1489 bytes (72%) of dynamic memory, leaving 559 bytes for local variables. Maximum is 2048 bytes.
-
 #include <SPI.h>
 #include "SdFat.h"
 #include <OneWire.h>
@@ -58,7 +51,7 @@ void setup() {
   pinMode(buttonPin, INPUT_PULLUP);
 
   Serial.begin(9600);
-  while (!Serial) {
+  while (! Serial) {
     delay(10);
   }
 
@@ -132,7 +125,7 @@ void setup() {
       break;
     }
   }
-  if (!file.open(fileName, O_WRONLY | O_CREAT | O_EXCL)) {
+  if (! file.open(fileName, O_WRONLY | O_CREAT | O_EXCL)) {
     error("file.open error at setup()");
   }
 
