@@ -4,6 +4,13 @@
 #include <DallasTemperature.h>
 #include "RTClib.h"
 
+// one row of data without remarks or errors is 
+// 36 bytes -> with 30 sec. measurement interval 
+// 24 hours produces 2880 lines, 2880 * 36 = 
+// 103680 bytes = 12.96 kilobytes
+// header row is 48 bytes -> 103728 = 104 KB
+
+#define SD_FILESIZE 103728
 // Data wire is plugged into port 6 on the Arduino
 #define ONE_WIRE_BUS 6
 #define TEMPERATURE_PRECISION 12
@@ -41,9 +48,39 @@ const uint8_t chipSelect = 10;
 SdFat sd;
 SdFile file;
 char fileName[] = "00000000.CSV";
+uint32_t fileSize;
 
 // Error messages stored in flash.
 #define error(msg) sd.errorHalt(F(msg))
+
+void newFile() {
+  now = rtc.now();
+  fileName[0] = (now.year() / 10) % 10 + '0';
+  fileName[1] = now.year() % 10 + '0';
+  fileName[2] = now.month() / 10 + '0';
+  fileName[3] = now.month() % 10 + '0';
+  fileName[4] = now.day() / 10 + '0';
+  fileName[5] = now.day() % 10 + '0';
+  for (uint8_t i = 0; i < 100; i++) {
+    fileName[6] = i / 10 + '0';
+    fileName[7] = i % 10 + '0';
+    if (! sd.exists(fileName)) {
+      // only break from loop with a new fileName if it doesn't exist
+      break;
+    }
+  }
+  if (! file.open(fileName, O_WRONLY | O_CREAT | O_EXCL)) {
+    error("file.open error");
+  }
+    Serial.print(F("Logging to: "));
+  Serial.println(fileName);
+  file.println(F("datetime,T inside,T outside,remark,error,error"));
+  Serial.println("File header: datetime,T inside,T outside,remark");
+
+  if (! file.sync() || file.getWriteError()) {
+    error("file.sync() error");
+  }
+}
 
 void setup() {
   // initialize the pushbutton pin as an pull-up input
@@ -111,32 +148,7 @@ void setup() {
   if (! sd.begin(chipSelect, SD_SCK_MHZ(50))) {
     sd.initErrorHalt();
   }
-  fileName[0] = (now.year() / 10) % 10 + '0';
-  fileName[1] = now.year() % 10 + '0';
-  fileName[2] = now.month() / 10 + '0';
-  fileName[3] = now.month() % 10 + '0';
-  fileName[4] = now.day() / 10 + '0';
-  fileName[5] = now.day() % 10 + '0';
-  for (uint8_t i = 0; i < 100; i++) {
-    fileName[6] = i / 10 + '0';
-    fileName[7] = i % 10 + '0';
-    if (! sd.exists(fileName)) {
-      // only break from loop with a new fileName if it doesn't exist
-      break;
-    }
-  }
-  if (! file.open(fileName, O_WRONLY | O_CREAT | O_EXCL)) {
-    error("file.open error at setup()");
-  }
-
-  Serial.print(F("Logging to: "));
-  Serial.println(fileName);
-  file.println(F("datetime,T inside,T outside,remark,error,error"));
-  Serial.println("File header: datetime,T inside,T outside,remark");
-
-  if (! file.sync() || file.getWriteError()) {
-    error("file.sync() error at setup()");
-  }
+  newFile();
 }
 
 void loop() {
@@ -242,6 +254,12 @@ void loop() {
       error("file.sync() error at loop()");
     }
 
+    if (file.fileSize() > SD_FILESIZE) {
+      file.close();
+      newFile();
+    }
+    Serial.print(file.fileSize());
+    Serial.print("  ");
     Serial.print(dateAndTimeArr);
     Serial.print(", ");
     Serial.print(insideTempC);
