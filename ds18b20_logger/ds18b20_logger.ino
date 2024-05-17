@@ -1,7 +1,12 @@
+//ilman SD-toimintoja:
 //Sketch uses 13184 bytes (40%) of program storage space. Maximum is 32256 bytes.
 //Global variables use 770 bytes (37%) of dynamic memory, leaving 1278 bytes for local variables. Maximum is 2048 bytes.
+//SdFat-kirjaston ja SD-toimintojen kanssa:
+//Sketch uses 23584 bytes (73%) of program storage space. Maximum is 32256 bytes.
+//Global variables use 1489 bytes (72%) of dynamic memory, leaving 559 bytes for local variables. Maximum is 2048 bytes.
 
 #include <SPI.h>
+#include "SdFat.h"
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include "RTClib.h"
@@ -39,8 +44,15 @@ bool writeButtonPress = false;
 unsigned long lastDebounceTime = 0;  // the last time the output pin was toggled
 unsigned long debounceDelay = 50;    // the debounce time; increase if the output flickers
 
-void setup() {
+const uint8_t chipSelect = 10;
+SdFat sd;
+SdFile file;
+char fileName[] = "00000000.CSV";
 
+// Error messages stored in flash.
+#define error(msg) sd.errorHalt(F(msg))
+
+void setup() {
   // initialize the pushbutton pin as an pull-up input
   // the pull-up input pin will be HIGH when the switch is open and LOW when the switch is closed.
   pinMode(buttonPin, INPUT_PULLUP);
@@ -68,7 +80,6 @@ void setup() {
   Serial.print("Found ");
   Serial.print(sensors.getDeviceCount(), DEC);
   Serial.println(" devices.");
-
   // report parasite power requirements
   Serial.print("Parasite power is: ");
   if (sensors.isParasitePowerMode()) Serial.println("ON");
@@ -76,11 +87,20 @@ void setup() {
 
   // show the device addresses
   Serial.print("Device 0 Address: ");
-  printAddress(insideThermometer);
+  //printAddress(insideThermometer);
+  for (uint8_t i = 0; i < 8; i++) {
+    // zero pad the address if necessary
+    if (insideThermometer[i] < 16) Serial.print("0");
+    Serial.print(insideThermometer[i], HEX);
+  }
   Serial.println();
-
   Serial.print("Device 1 Address: ");
-  printAddress(outsideThermometer);
+  //printAddress(outsideThermometer);
+  for (uint8_t i = 0; i < 8; i++) {
+    // zero pad the address if necessary
+    if (outsideThermometer[i] < 16) Serial.print("0");
+    Serial.print(outsideThermometer[i], HEX);
+  }
   Serial.println();
 
   // set the resolution to defined bits per device
@@ -90,18 +110,39 @@ void setup() {
   Serial.print("Device 0 Resolution: ");
   Serial.print(sensors.getResolution(insideThermometer), DEC);
   Serial.println();
-
   Serial.print("Device 1 Resolution: ");
   Serial.print(sensors.getResolution(outsideThermometer), DEC);
   Serial.println();
-}
 
-// function to print a device address
-void printAddress(DeviceAddress deviceAddress) {
-  for (uint8_t i = 0; i < 8; i++) {
-    // zero pad the address if necessary
-    if (deviceAddress[i] < 16) Serial.print("0");
-    Serial.print(deviceAddress[i], HEX);
+  delay(1000);
+  if (! sd.begin(chipSelect, SD_SCK_MHZ(50))) {
+    sd.initErrorHalt();
+  }
+  fileName[0] = (now.year() / 10) % 10 + '0';
+  fileName[1] = now.year() % 10 + '0';
+  fileName[2] = now.month() / 10 + '0';
+  fileName[3] = now.month() % 10 + '0';
+  fileName[4] = now.day() / 10 + '0';
+  fileName[5] = now.day() % 10 + '0';
+  for (uint8_t i = 0; i < 100; i++) {
+    fileName[6] = i / 10 + '0';
+    fileName[7] = i % 10 + '0';
+    if (! sd.exists(fileName)) {
+      // only break from loop with a new fileName if it doesn't exist
+      break;
+    }
+  }
+  if (!file.open(fileName, O_WRONLY | O_CREAT | O_EXCL)) {
+    error("file.open error at setup()");
+  }
+
+  Serial.print(F("Logging to: "));
+  Serial.println(fileName);
+  file.println(F("datetime,T inside,T outside,remark,error,error"));
+  Serial.println("File header: datetime,T inside,T outside,remark");
+
+  if (! file.sync() || file.getWriteError()) {
+    error("file.sync() error at setup()");
   }
 }
 
@@ -110,7 +151,6 @@ void loop() {
   uint16_t thisYear;
   int8_t thisMonth, thisDay, thisHour, thisMinute, thisSecond;
   char dateAndTimeArr[20]; //19 digits plus the null char
-  char dataRemarkArr[50];
 
   int reading = digitalRead(buttonPin);
   currentMs = millis();
@@ -144,34 +184,76 @@ void loop() {
     sprintf_P(dateAndTimeArr, PSTR("%4d-%02d-%02dT%d:%02d:%02d"),
               thisYear, thisMonth, thisDay, thisHour, thisMinute, thisSecond);
 
-    strcpy(dataRemarkArr, " ");
-    if (writeButtonPress) {
-      strcat(dataRemarkArr, "Kissaa rapsutettu!");
-      writeButtonPress = false;
-    }
-
     // call sensors.requestTemperatures() to issue a global temperature
     // request to all devices on the bus
     sensors.requestTemperatures();
     float insideTempC = sensors.getTempC(insideThermometer);
     float outsideTempC = sensors.getTempC(outsideThermometer);
-    if (insideTempC == DEVICE_DISCONNECTED_C || insideTempC > 125 || insideTempC < -55) {
-      strcat(dataRemarkArr, " Vika:inside");
+    bool insideSensorErrorState = false;
+    bool outsideSensorErrorState = false;
+    bool insideSensorFaultState = false;
+    bool outsideSensorFaultState = false;
+
+    if (insideTempC == DEVICE_DISCONNECTED_C ||
+        insideTempC > 125 ||
+        insideTempC < -55) {
+      insideSensorErrorState = true;
     }
-    if (outsideTempC == DEVICE_DISCONNECTED_C || outsideTempC > 125 || outsideTempC < -55) {
-      strcat(dataRemarkArr, " Vika:outside");
+    if (insideTempC = 85.00) {
+      insideSensorFaultState = true;
+    }
+    if (outsideTempC == DEVICE_DISCONNECTED_C ||
+        outsideTempC > 125 ||
+        outsideTempC < -55) {
+      outsideSensorErrorState = true;
+    }
+    if (outsideTempC = 85.00) {
+      outsideSensorFaultState = true;
+    }
+
+    file.print(dateAndTimeArr);
+    file.write(',');
+    file.print(insideTempC);
+    file.write(',');
+    file.print(outsideTempC);
+    file.write(',');
+    if (writeButtonPress) {
+      file.print("Kissaa rapsutettu!");
+      Serial.print(" Kissaa rapsutettu!");
+      writeButtonPress = false;
+    }
+    file.write(',');
+    if (insideSensorErrorState) {
+      file.print("Vika:inside");
+      Serial.print(" Vika:inside");
+      insideSensorErrorState = false;
+    }
+    if (insideSensorFaultState) {
+      file.print(" Tarkasta mittaus!");
+      Serial.print(" Tarkasta mittaus!");
+      insideSensorFaultState = false;
+    }
+    file.write(',');
+    if (outsideSensorErrorState) {
+      file.print("Vika:outside");
+      Serial.print(" Vika:outside");
+      outsideSensorErrorState = false;
+    }
+    if (outsideSensorFaultState) {
+      file.print(" Tarkasta mittaus!");
+      Serial.print(" Tarkasta mittaus!");
+      outsideSensorFaultState = false;
+    }
+    file.println();
+    if (! file.sync() || file.getWriteError()) {
+      error("file.sync() error at loop()");
     }
 
     Serial.print(dateAndTimeArr);
     Serial.print(", ");
-    Serial.print("insideTempC: ");
     Serial.print(insideTempC);
     Serial.print(", ");
-    Serial.print("outsideTempC: ");
     Serial.print(outsideTempC);
-    Serial.print(", ");
-    Serial.print("dataRemarkArr: ");
-    Serial.print(dataRemarkArr);
     Serial.println();
   }
 }
