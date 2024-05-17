@@ -192,7 +192,7 @@ void loop() {
         insideTempC < -55) {
       insideSensorErrorState = true;
     }
-    if (insideTempC = 85.00) {
+    if (insideTempC == 85.00) {
       insideSensorFaultState = true;
     }
     if (outsideTempC == DEVICE_DISCONNECTED_C ||
@@ -200,7 +200,7 @@ void loop() {
         outsideTempC < -55) {
       outsideSensorErrorState = true;
     }
-    if (outsideTempC = 85.00) {
+    if (outsideTempC == 85.00) {
       outsideSensorFaultState = true;
     }
 
