@@ -4,12 +4,13 @@
 #include <DallasTemperature.h>
 #include "RTClib.h"
 
-// one row of data without remarks or errors is 
-// 36 bytes -> with 30 sec. measurement interval 
-// 24 hours produces 2880 lines, 2880 * 36 = 
+// one row of data without remarks or errors is
+// 36 bytes -> with 30 sec. measurement interval
+// 24 hours produces 2880 lines, 2880 * 36 =
 // 103680 bytes = 12.96 kilobytes
 // header row is 48 bytes -> 103728 = 104 KB
 
+#define LEDPIN 0
 #define SD_FILESIZE 103728
 // Data wire is plugged into port 6 on the Arduino
 #define ONE_WIRE_BUS 6
@@ -37,14 +38,14 @@ const unsigned long measurementIntervalSec = 5; // seconds, measured in RTC unix
 unsigned long startClockCheckIntervalMs = 0;
 const unsigned long clockCheckIntervalMs = 1000;
 
-const int buttonPin = 4;
+const int buttonPin = 13;
 int currentButtonState;
 int lastButtonState = HIGH;   // the previous reading from the input pin
 bool writeButtonPress = false;
 unsigned long lastDebounceTime = 0;  // the last time the output pin was toggled
 unsigned long debounceDelay = 50;    // the debounce time; increase if the output flickers
 
-const uint8_t chipSelect = 10;
+const uint8_t chipSelect = 8;
 SdFat sd;
 SdFile file;
 char fileName[] = "00000000.CSV";
@@ -72,7 +73,7 @@ void newFile() {
   if (! file.open(fileName, O_WRONLY | O_CREAT | O_EXCL)) {
     error("file.open error");
   }
-    Serial.print(F("Logging to: "));
+  Serial.print(F("Logging to: "));
   Serial.println(fileName);
   file.println(F("datetime,T inside,T outside,remark,error,error"));
   Serial.println("File header: datetime,T inside,T outside,remark");
@@ -86,6 +87,7 @@ void setup() {
   // initialize the pushbutton pin as an pull-up input
   // the pull-up input pin will be HIGH when the switch is open and LOW when the switch is closed.
   pinMode(buttonPin, INPUT_PULLUP);
+  pinMode(LEDPIN, OUTPUT);
 
   Serial.begin(9600);
   while (! Serial) {
@@ -168,6 +170,12 @@ void loop() {
   if (currentMs - lastDebounceTime >= debounceDelay) {
     if (lastButtonState == LOW && currentButtonState == HIGH) {
       writeButtonPress = true;
+      for (int8_t i = 0; i < 10; i++) {
+        digitalWrite(LEDPIN, HIGH);
+        delay(50);
+        digitalWrite(LEDPIN, LOW);
+        delay(30);
+      }
     }
     lastButtonState = currentButtonState;
   }
@@ -175,10 +183,13 @@ void loop() {
   if (currentMs - startClockCheckIntervalMs >= clockCheckIntervalMs) {
     startClockCheckIntervalMs = currentMs;
     now = rtc.now();
+    digitalWrite(LEDPIN, HIGH);
+    delay(75);
+    digitalWrite(LEDPIN, LOW);
   }
 
   if (now.unixtime() - startMeasurementIntervalSec >= measurementIntervalSec) {
-
+    digitalWrite(LEDPIN, HIGH);
     startMeasurementIntervalSec = now.unixtime();
     thisYear = now.year();
     thisMonth = now.month();
@@ -266,5 +277,6 @@ void loop() {
     Serial.print(", ");
     Serial.print(outsideTempC);
     Serial.println();
+    digitalWrite(LEDPIN, LOW);
   }
 }
