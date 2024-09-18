@@ -3,7 +3,7 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include "RTClib.h"
-#include <avr/wdt.h>
+//#include <avr/wdt.h>
 
 // one row of data without remarks or errors is
 // 35 bytes -> with 30 sec. measurement interval
@@ -65,7 +65,7 @@ uint32_t fileSize;
 #define error(msg) sd.errorHalt(F(msg))
 
 void newFile() {
-  wdt_reset();
+  // wdt_reset();
   now = rtc.now();
   fileName[0] = (now.year() / 10) % 10 + '0';
   fileName[1] = now.year() % 10 + '0';
@@ -96,9 +96,9 @@ void newFile() {
 }
 
 void setup() {
-  wdt_disable();  // Disable the watchdog and wait for more than 2 seconds
-  delay(3000);  // With this the Arduino doesn't keep resetting infinitely in case of wrong configuration
-  wdt_enable(WDTO_8S);
+//  wdt_disable();  // Disable the watchdog and wait for more than 2 seconds
+//  delay(3000);  // With this the Arduino doesn't keep resetting infinitely in case of wrong configuration
+//  wdt_enable(WDTO_8S);
   
   // initialize the pushbutton pin as an pull-up input
   // the pull-up input pin will be HIGH when the switch is open and LOW when the switch is closed.
@@ -112,6 +112,7 @@ void setup() {
     Serial.flush();
     while (1) delay(10);
   }
+  rtc.adjust(DateTime(2024, 5, 20, 20, 22, 13));
   now = rtc.now();
   today = now.day();
   // start measurementInterval and set it back by interval time -> starts measurements in loop() right away
@@ -120,7 +121,7 @@ void setup() {
 
   // Start up the sensor library
   sensors.begin();
-  wdt_reset();
+  // wdt_reset();
   // locate devices on the bus
   Serial.print("Locating devices...");
   Serial.print("Found ");
@@ -159,7 +160,7 @@ void setup() {
   Serial.print("Device 1 Resolution: ");
   Serial.print(sensors.getResolution(outsideThermometer), DEC);
   Serial.println();
-  wdt_reset();
+  // wdt_reset();
   delay(1000);
   if (! sd.begin(chipSelect, SD_SCK_MHZ(50))) {
     sd.initErrorHalt();
@@ -173,7 +174,7 @@ void loop() {
   int8_t thisMonth, thisDay, thisHour, thisMinute, thisSecond;
   char dateAndTimeArr[20]; //19 digits plus the null char
   bool clockFaultState = false;
-  wdt_reset();
+  // wdt_reset();
   int reading = digitalRead(buttonPin);
   currentMs = millis();
 
@@ -204,7 +205,7 @@ void loop() {
   }
 
   if (now.unixtime() - startMeasurementIntervalSec >= MEASUREMENT_INTERVAL_SEC) {
-    wdt_reset();
+    // wdt_reset();
     digitalWrite(LEDPIN, HIGH);
     startMeasurementIntervalSec = now.unixtime();
     if (startMeasurementIntervalSec <  LAST_CLOCK_ADJUSTMENT_SEC) {
@@ -229,7 +230,7 @@ void loop() {
       file.close();
       newFile();
     }
-    wdt_reset();
+    // wdt_reset();
     // call sensors.requestTemperatures() to issue a global temperature
     // request to all devices on the bus
     sensors.requestTemperatures();
@@ -256,7 +257,7 @@ void loop() {
     if (outsideTempC == 85.00) {
       outsideSensorFaultState = true;
     }
-    wdt_reset();
+    // wdt_reset();
     file.print(dateAndTimeArr);
     file.write(',');
     file.print(insideTempC);
@@ -300,7 +301,7 @@ void loop() {
     if (! file.sync() || file.getWriteError()) {
       error("file.sync() error at loop()");
     }
-    wdt_reset();
+    // wdt_reset();
     Serial.print(file.fileSize());
     Serial.print("  ");
     Serial.print(dateAndTimeArr);
